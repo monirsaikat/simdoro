@@ -1,7 +1,7 @@
 from typing import Optional
 
 from PySide6.QtCore import QTimer, Qt
-from PySide6.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QProgressBar, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QProgressBar, QPushButton, QVBoxLayout, QWidget, QSystemTrayIcon
 
 from classes.SettingsDialog import SettingsDialog
 from helpers import mmss
@@ -18,11 +18,14 @@ class PomodoroWindow(QWidget):
         super().__init__()
         self.instance_lock = instance_lock
 
+        self.auto_start_break = True      
+        self.auto_start_focus = True     
+
         self.minutes = 2
         self.break_minutes = 5
         self.setWindowTitle("Pomodoro")
 
-        self.session_seconds = self.minutes * 60
+        self.session_seconds = self.minutes # todo: seconds for now
         self.break_seconds = self.break_minutes * 60
 
         self.is_break = False
@@ -71,6 +74,21 @@ class PomodoroWindow(QWidget):
         self.update_progress()
         self.tray.set_window_visible(True)
         self.update_tray()
+    
+    def start_timer(self):
+        if self.remaining <= 0:
+            self.remaining = self.total_for_mode()
+            self.label.setText(mmss(self.remaining))
+            self.update_progress()
+
+        self.running = True
+        self.btn_toggle.setText('Stop')
+        self.timer.start()
+        self.update_tray()
+    
+    def notify(self, title, body):
+        if getattr(self, 'tray', None):
+            pass
 
     def on_settings(self):
         dialog = SettingsDialog(self)
@@ -119,32 +137,44 @@ class PomodoroWindow(QWidget):
         self.tray.update(self.running, self.is_break, self.remaining)
         self.tray.set_window_visible(not self.isHidden())
 
+    def pause_timer(self):
+        play_sound()
+        self.timer.stop()
+        self.running = False
+        self.btn_toggle.setText("Start")
+        self.is_break = not self.is_break
+        self.remaining = self.break_seconds if self.is_break else self.session_seconds
+        
+        self.label.setText("Break!" if self.is_break else "Work!")
+        
+        self.update_progress()
+        self.notify("Time UP", "Time has been up for this session")
+        self.update_tray()
+
+        want_delay_ms = 1000
+
+        if self.is_break and self.auto_start_break:
+            QTimer.singleShot(want_delay_ms, self.start_timer)
+        elif (not self.is_break and self.auto_start_break):
+            QTimer.singleShot(want_delay_ms, self.start_timer)
+
+
     def tick(self):
         self.remaining -= 1
         self.label.setText(mmss(self.remaining))
         self.update_progress()
 
         if self.remaining <= 0:
-            play_sound()
-            self.timer.stop()
-            self.running = False
-            self.btn_toggle.setText("Start")
-            self.is_break = not self.is_break
-            self.remaining = self.break_seconds if self.is_break else self.session_seconds
-            self.label.setText("Break!" if self.is_break else "Work!")
-            self.update_progress()
-        self.update_tray()
+            self.pause_timer()
 
     def on_toggle(self):
         if not self.running:
-            self.running = True
-            self.btn_toggle.setText("Stop")
-            self.timer.start()
+            self.start_timer()
         else:
             self.running = False
             self.btn_toggle.setText("Start")
             self.timer.stop()
-        self.update_tray()
+            self.update_tray()
 
     def on_reset(self):
         self.timer.stop()
