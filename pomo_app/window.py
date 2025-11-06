@@ -155,7 +155,7 @@ class PomodoroWindow(QWidget):
 
         if self.is_break and self.auto_start_break:
             QTimer.singleShot(want_delay_ms, self.start_timer)
-        elif (not self.is_break and self.auto_start_break):
+        elif (not self.is_break and self.auto_start_focus):
             QTimer.singleShot(want_delay_ms, self.start_timer)
 
 
